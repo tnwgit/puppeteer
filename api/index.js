@@ -1,4 +1,5 @@
-const chromium = require('chrome-aws-lambda');
+const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium');
 
 // Serverless function handler voor Vercel
 module.exports = async (req, res) => {
@@ -32,11 +33,11 @@ module.exports = async (req, res) => {
     try {
       console.log(`Scraping: ${targetUrl}`);
       
-      // Start browser met chrome-aws-lambda (geoptimaliseerd voor serverless)
-      browser = await chromium.puppeteer.launch({
+      // Start browser met @sparticuz/chromium (geoptimaliseerd voor serverless)
+      browser = await puppeteer.launch({
         args: chromium.args,
         defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath,
+        executablePath: await chromium.executablePath(),
         headless: chromium.headless,
         ignoreHTTPSErrors: true,
       });
@@ -88,7 +89,7 @@ module.exports = async (req, res) => {
         url: targetUrl,
         tekst: opgeschoondeTekst,
         timestamp: new Date().toISOString(),
-        environment: 'Vercel Serverless (chrome-aws-lambda)'
+        environment: 'Vercel Serverless (@sparticuz/chromium)'
       });
 
     } catch (error) {
@@ -128,7 +129,7 @@ module.exports = async (req, res) => {
   // Health check endpoint (alleen als er geen URL parameter is)
   return res.json({
     message: 'Puppeteer Web Scraper API is actief op Vercel',
-    environment: 'Vercel Serverless (chrome-aws-lambda)',
+    environment: 'Vercel Serverless (@sparticuz/chromium)',
     endpoints: {
       scrape: 'GET /api?url=<url-om-te-scrapen>'
     },
