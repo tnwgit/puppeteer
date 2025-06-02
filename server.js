@@ -2,7 +2,7 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 // Middleware voor JSON parsing
 app.use(express.json());
@@ -11,6 +11,7 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Puppeteer Web Scraper API is actief',
+    environment: process.env.VERCEL ? 'Vercel Serverless' : 'Local',
     endpoints: {
       scrape: 'GET /scrape?url=<url-om-te-scrapen>'
     }
@@ -42,21 +43,31 @@ app.get('/scrape', async (req, res) => {
   let browser;
   
   try {
-    // Start Puppeteer browser
-    browser = await puppeteer.launch({
-      headless: true,
+    // Configuratie voor Vercel/serverless environment
+    const puppeteerConfig = {
+      headless: "new", // Fix voor deprecation warning
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor'
       ]
-    });
+    };
+
+    // Als we op Vercel draaien, gebruik chrome-aws-lambda
+    if (process.env.VERCEL) {
+      puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
+    }
+
+    // Start Puppeteer browser
+    browser = await puppeteer.launch(puppeteerConfig);
 
     const page = await browser.newPage();
     
     // Stel timeout en user agent in
-    await page.setDefaultNavigationTimeout(30000);
+    await page.setDefaultNavigationTimeout(25000); // Korter voor serverless
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
     console.log(`Scraping: ${url}`);
@@ -64,7 +75,7 @@ app.get('/scrape', async (req, res) => {
     // Navigeer naar de pagina
     await page.goto(url, { 
       waitUntil: 'domcontentloaded',
-      timeout: 30000 
+      timeout: 25000 
     });
 
     // Probeer tekst uit <main> te halen, anders uit <body>
@@ -101,7 +112,8 @@ app.get('/scrape', async (req, res) => {
     res.json({
       url: url,
       tekst: opgeschoondeTekst,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      environment: process.env.VERCEL ? 'Vercel' : 'Local'
     });
 
   } catch (error) {
@@ -115,7 +127,7 @@ app.get('/scrape', async (req, res) => {
     // Bepaal fouttype en stuur juiste response
     if (error.name === 'TimeoutError') {
       res.status(408).json({
-        error: 'Timeout: Pagina kon niet binnen 30 seconden worden geladen',
+        error: 'Timeout: Pagina kon niet binnen 25 seconden worden geladen',
         url: url
       });
     } else if (error.message.includes('net::ERR_NAME_NOT_RESOLVED')) {
@@ -138,16 +150,21 @@ app.get('/scrape', async (req, res) => {
   }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Puppeteer Web Scraper API draait op poort ${PORT}`);
-  console.log(`📖 Gebruik: http://localhost:${PORT}/scrape?url=<url-om-te-scrapen>`);
-});
+// Voor Vercel serverless
+if (process.env.VERCEL) {
+  module.exports = app;
+} else {
+  // Voor lokale development
+  app.listen(PORT, () => {
+    console.log(`🚀 Puppeteer Web Scraper API draait op poort ${PORT}`);
+    console.log(`📖 Gebruik: http://localhost:${PORT}/scrape?url=<url-om-te-scrapen>`);
+  });
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n👋 Server wordt afgesloten...');
-  process.exit(0);
-});
+  // Graceful shutdown
+  process.on('SIGINT', () => {
+    console.log('\n👋 Server wordt afgesloten...');
+    process.exit(0);
+  });
 
-module.exports = app; 
+  module.exports = app;
+} 
