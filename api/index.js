@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const chromium = require('chrome-aws-lambda');
 
 // Serverless function handler voor Vercel
 module.exports = async (req, res) => {
@@ -20,7 +20,7 @@ module.exports = async (req, res) => {
   if (pathname === '/' || pathname === '/api' || pathname === '/api/') {
     return res.json({
       message: 'Puppeteer Web Scraper API is actief op Vercel',
-      environment: 'Vercel Serverless',
+      environment: 'Vercel Serverless (chrome-aws-lambda)',
       endpoints: {
         scrape: 'GET /api?url=<url-om-te-scrapen>'
       },
@@ -50,26 +50,17 @@ module.exports = async (req, res) => {
   let browser;
   
   try {
-    // Configuratie voor Vercel serverless environment
-    const puppeteerConfig = {
-      headless: "new",
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
-      ]
-    };
-
     console.log(`Scraping: ${targetUrl}`);
     
-    // Start Puppeteer browser
-    browser = await puppeteer.launch(puppeteerConfig);
+    // Start browser met chrome-aws-lambda (geoptimaliseerd voor serverless)
+    browser = await chromium.puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
+    });
+
     const page = await browser.newPage();
     
     // Stel timeout en user agent in (korter voor serverless)
@@ -117,7 +108,7 @@ module.exports = async (req, res) => {
       url: targetUrl,
       tekst: opgeschoondeTekst,
       timestamp: new Date().toISOString(),
-      environment: 'Vercel Serverless'
+      environment: 'Vercel Serverless (chrome-aws-lambda)'
     });
 
   } catch (error) {
