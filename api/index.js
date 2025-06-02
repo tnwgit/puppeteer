@@ -33,14 +33,45 @@ module.exports = async (req, res) => {
     try {
       console.log(`Scraping: ${targetUrl}`);
       
-      // Start browser met @sparticuz/chromium (geoptimaliseerd voor serverless)
-      browser = await puppeteer.launch({
-        args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
-        ignoreHTTPSErrors: true,
-      });
+      // Configuratie voor Vercel serverless environment
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
+      
+      let launchConfig;
+      
+      if (isProduction) {
+        // Productie configuratie met @sparticuz/chromium
+        launchConfig = {
+          args: [
+            ...chromium.args,
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--single-process',
+            '--no-zygote',
+            '--disable-web-security',
+            '--disable-features=VizDisplayCompositor'
+          ],
+          defaultViewport: chromium.defaultViewport,
+          executablePath: await chromium.executablePath(),
+          headless: chromium.headless,
+          ignoreHTTPSErrors: true,
+        };
+      } else {
+        // Lokale development configuratie
+        launchConfig = {
+          headless: "new",
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+          ]
+        };
+      }
+
+      // Start browser met configuratie
+      browser = await puppeteer.launch(launchConfig);
 
       const page = await browser.newPage();
       
@@ -89,7 +120,7 @@ module.exports = async (req, res) => {
         url: targetUrl,
         tekst: opgeschoondeTekst,
         timestamp: new Date().toISOString(),
-        environment: 'Vercel Serverless (@sparticuz/chromium)'
+        environment: isProduction ? 'Vercel Serverless (@sparticuz/chromium)' : 'Local Development'
       });
 
     } catch (error) {
@@ -116,6 +147,13 @@ module.exports = async (req, res) => {
           error: 'Verbinding geweigerd door server',
           url: targetUrl
         });
+      } else if (error.message.includes('libnss3.so') || error.message.includes('shared libraries')) {
+        return res.status(500).json({
+          error: 'Browser configuratie fout - serverless environment mist dependencies',
+          details: 'Dit is een bekende Vercel/Puppeteer compatibility issue',
+          url: targetUrl,
+          suggestion: 'Probeer een andere serverless provider of lokale deployment'
+        });
       } else {
         return res.status(500).json({
           error: 'Er is een fout opgetreden bij het scrapen',
@@ -137,6 +175,7 @@ module.exports = async (req, res) => {
       healthCheck: 'GET /api/',
       scraping: 'GET /api?url=https://example.com'
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    note: 'Bij persistente browser fouten, overweeg Docker deployment'
   });
 }; 
